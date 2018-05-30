@@ -35,6 +35,7 @@ import sys
 import math
 import pickle
 from sklearn.svm import SVC
+import shutil
 
 def main(args):
   
@@ -120,7 +121,32 @@ def main(args):
                     
                 accuracy = np.mean(np.equal(best_class_indices, labels))
                 print('Accuracy: %.3f' % accuracy)
+
+            elif (args.mode=='CLASSIFY_SAVE'):
+                # Classify images
+                print('Testing classifier and save')
+                with open(classifier_filename_exp, 'rb') as infile:
+                    (model, class_names) = pickle.load(infile)
+
+                print('Loaded classifier model from file "%s"' % classifier_filename_exp)
+
+                predictions = model.predict_proba(emb_array)
+                best_class_indices = np.argmax(predictions, axis=1)
+                best_class_probabilities = predictions[np.arange(len(best_class_indices)), best_class_indices]
                 
+                for i in range(len(best_class_indices)):
+                    print('%4d  %s: %.3f' % (i, class_names[best_class_indices[i]], best_class_probabilities[i]))
+                    class_path = os.path.join(args.output_dir, class_names[best_class_indices[i]])                    
+                    if not os.path.exists(class_path):                        
+                        os.mkdir(class_path)
+                    filename, fileext = os.path.splitext(os.path.basename(paths[i]))
+                    if best_class_probabilities[i] >= 0.5:                    
+                        shutil.copy2(paths[i], os.path.join(class_path, filename + '_(%.3f)' % best_class_probabilities[i] + fileext))
+                    else:
+                        discarded_path = os.path.join(args.output_dir, 'discarded')
+                        if not os.path.exists(discarded_path):                        
+                            os.mkdir(discarded_path)
+                        shutil.copy2(paths[i], os.path.join(discarded_path, filename + '_%s_(%.3f)' % (class_names[best_class_indices[i]], best_class_probabilities[i]) + fileext))
             
 def split_dataset(dataset, min_nrof_images_per_class, nrof_train_images_per_class):
     train_set = []
@@ -138,7 +164,7 @@ def split_dataset(dataset, min_nrof_images_per_class, nrof_train_images_per_clas
 def parse_arguments(argv):
     parser = argparse.ArgumentParser()
     
-    parser.add_argument('mode', type=str, choices=['TRAIN', 'CLASSIFY'],
+    parser.add_argument('mode', type=str, choices=['TRAIN', 'CLASSIFY', 'CLASSIFY_SAVE'],
         help='Indicates if a new classifier should be trained or a classification ' + 
         'model should be used for classification', default='CLASSIFY')
     parser.add_argument('data_dir', type=str,
@@ -163,6 +189,8 @@ def parse_arguments(argv):
         help='Only include classes with at least this number of images in the dataset', default=20)
     parser.add_argument('--nrof_train_images_per_class', type=int,
         help='Use this number of images from each class for training and the rest for testing', default=10)
+    parser.add_argument('--output_dir', type=str,
+        help='Path to the output for classifier and save mode')
     
     return parser.parse_args(argv)
 
