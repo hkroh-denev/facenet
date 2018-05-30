@@ -76,7 +76,7 @@ def main(args):
             for image_path in cls.image_paths:
                 nrof_images_total += 1
                 filename = os.path.splitext(os.path.split(image_path)[1])[0]
-                output_filename = os.path.join(output_class_dir, filename+'.png')
+                output_filename = os.path.join(output_class_dir, filename+'.'+args.output_image_format)
                 print(image_path)
                 if not os.path.exists(output_filename):
                     try:
@@ -153,6 +153,8 @@ def parse_arguments(argv):
         help='Upper bound on the amount of GPU memory that will be used by the process.', default=1.0)
     parser.add_argument('--detect_multiple_faces', type=bool,
                         help='Detect and align multiple faces per image.', default=False)
+    parser.add_argument('--output_image_format', type=str,
+                        help='Image format of output (jpg, png)', default='png')
     return parser.parse_args(argv)
 
 if __name__ == '__main__':
