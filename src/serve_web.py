@@ -24,22 +24,22 @@ class MTCNN:
     def __init__(self, sess):
         self.session = sess
         self.pnet, self.rnet, self.onet = align.detect_face.create_mtcnn(self.session, None)
-        
+
         self.minsize = 20 # minimum size of face
         self.threshold = [ 0.6, 0.7, 0.7 ]  # three steps's threshold
         self.factor = 0.709 # scale factor
-        
+
         self.margin = 32
         self.image_size = 160
-            
+
     def detect(self, img):
-        with self.session.as_default():        
+        with self.session.as_default():
             if img.ndim<2:
                 return [], []
             if img.ndim == 2:
                 img = facenet.to_rgb(img)
             img = img[:,:,0:3]
-        
+
             bounding_boxes, _ = align.detect_face.detect_face(img, self.minsize, self.pnet, self.rnet, self.onet, self.threshold, self.factor)
             nrof_faces = bounding_boxes.shape[0]
             detected_faces = []
@@ -51,7 +51,7 @@ class MTCNN:
                 if nrof_faces>1:
                     for i in range(nrof_faces):
                         det_arr.append(np.squeeze(det[i]))
-                        
+
                 for i, det in enumerate(det_arr):
                     det = np.squeeze(det)
                     bb = np.zeros(4, dtype=np.int32)
@@ -64,10 +64,10 @@ class MTCNN:
                     detected_faces.append(scaled)
                     detected_bb.append(bb)
             return detected_faces, detected_bb
-    
+
 class FaceNet:
     def __init__(self, sess, args):
-        self.session = sess    
+        self.session = sess
         facenet.load_model(args.model)
 
         # Get input and output tensors
@@ -75,7 +75,7 @@ class FaceNet:
         self.embeddings = tf.get_default_graph().get_tensor_by_name("embeddings:0")
         self.phase_train_placeholder = tf.get_default_graph().get_tensor_by_name("phase_train:0")
         self.embedding_size = self.embeddings.get_shape()[1]
-        
+
     def preprocess(self, images):
         processed_images = []
         for img in images:
@@ -83,36 +83,36 @@ class FaceNet:
                 img = facenet.to_rgb(img)
             img = facenet.prewhiten(img)
             processed_images.append(img)
-        return processed_images  
-    
-    def extract_feature(self, images):          
+        return processed_images
+
+    def extract_feature(self, images):
         emb_array = self.session.run(self.embeddings, feed_dict={self.images_placeholder:images, self.phase_train_placeholder:False})
         return emb_array
-    
+
 class FaceClassifier:
     def __init__(self, args):
         classifier_filename_exp = os.path.expanduser(args.classifier_filename)
         with open(classifier_filename_exp, 'rb') as infile:
             (self.model, self.class_names) = pickle.load(infile)
-            
+
     def classify(self, embeddings):
         predictions = self.model.predict_proba(embeddings)
         best_class_indices = np.argmax(predictions, axis=1)
         best_class_probabilities = predictions[np.arange(len(best_class_indices)), best_class_indices]
         return best_class_indices, best_class_probabilities
-    
-def create_result_image(source_image, detected_bb, class_names, best_class_indices, best_class_probabilities):    
+
+def create_result_image(source_image, detected_bb, class_names, best_class_indices, best_class_probabilities):
     source_image = np.array(source_image)
     #result_image = cv2.cvtColor(source_image, cv2.COLOR_BGR2RGB)
     result_image = source_image.copy()
-    
+
     for i in range(len(detected_bb)):
         bb = detected_bb[i]
         cv2.rectangle(result_image, (bb[0], bb[1]), (bb[2], bb[3]), (0, 255, 0), 3)
         cv2.putText(result_image, class_names[best_class_indices[i]],
-                    (bb[0], bb[1] - 20), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                    (bb[2] + 5, bb[3] - 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
         cv2.putText(result_image, '%.3f' % best_class_probabilities[i],
-                    (bb[0], bb[3] + 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                    (bb[2] + 5, bb[3]), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
     return result_image
 
 class Serve(web.application):
@@ -130,15 +130,15 @@ class Index:
         <input type="submit" />
         </form>
         </body></html>"""
-        
+
     def POST(self):
-        x = web.input(myfile={})        
+        x = web.input(myfile={})
         if 'myfile' in x:
             fout = open('./input/1.jpg','wb') # creates the file where the uploaded file should be stored
             fout.write(x.myfile.file.read()) # writes the uploaded file to the newly created file.
             fout.close() # closes the file, upload complete.
         raise web.seeother('/run/local')
-        
+
 class RunLocal:
     def GET(self):
         start_time = time.time()
@@ -147,8 +147,8 @@ class RunLocal:
             img = misc.imread(input_path)
         except (IOError, ValueError, IndexError) as e:
             errorMessage = '{}: {}'.format(input_path, e)
-            return errorMessage  
-        loaded_time = time.time()   
+            return errorMessage
+        loaded_time = time.time()
         detected_faces, detected_bb = web.mtcnn.detect(img)
         detected_time = time.time()
         detected_faces = web.feature_net.preprocess(detected_faces)
@@ -159,7 +159,7 @@ class RunLocal:
         classified_time = time.time()
         result_image = create_result_image(img, detected_bb, web.classifier.class_names, best_class_indices, best_class_probabilities)
         misc.imsave('./output/result.png', result_image)
-        
+
         s = '<html><body>'
         s += '<h2>Result image</h2>'
         s += '<p><img src="/output" width="960"/></p>'
@@ -176,28 +176,28 @@ class RunLocal:
         s += 'Classifier : ' + '%.5f' % (classified_time - extracted_time)
         s += '</p></body><html>'
         return s
-    
+
 class Output:
     def GET(self):
         f = open('./output/result.png', 'rb')
         return f.read()
-        
+
 def main(args):
     print('Creating networks and loading parameters')
-    
+
     with tf.Graph().as_default():
         gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=args.gpu_memory_fraction)
         with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, log_device_placement=False)) as sess:
             mtcnn = MTCNN(sess)
-        
+
             print('Loading feature extraction model')
             feature_net = FaceNet(sess, args)
-            
+
             print('Loading classifer model')
             classifier = FaceClassifier(args)
-           
+
             print('Web server')
-            urls = ('/', 'Index', 
+            urls = ('/', 'Index',
                     '/run/local', 'RunLocal',
                     '/output/*', 'Output')
             webapp = Serve(urls, globals())
@@ -207,15 +207,15 @@ def main(args):
             web.classifier = classifier
             webapp.run(port=args.port_number)
 
-            
+
 def parse_arguments(argv):
     parser = argparse.ArgumentParser()
-    
-    parser.add_argument('model', type=str, 
+
+    parser.add_argument('model', type=str,
         help='Could be either a directory containing the meta_file and ckpt_file or a model protobuf (.pb) file')
-    parser.add_argument('classifier_filename', 
-        help='Classifier model file name as a pickle (.pkl) file. ' + 
-        'For training this is the output and for classification this is an input.')    
+    parser.add_argument('classifier_filename',
+        help='Classifier model file name as a pickle (.pkl) file. ' +
+        'For training this is the output and for classification this is an input.')
     parser.add_argument('--gpu_memory_fraction', type=float,
         help='Upper bound on the amount of GPU memory that will be used by the process.', default=0.5)
     parser.add_argument('--port_number', type=int,
