@@ -92,3 +92,7 @@ ENV/
 
 # PyCharm project setting
 .idea
+
+# web data
+input/
+output/

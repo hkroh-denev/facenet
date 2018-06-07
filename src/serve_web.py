@@ -40,7 +40,7 @@ class MTCNN:
                 img = facenet.to_rgb(img)
             img = img[:,:,0:3]
 
-            bounding_boxes, _ = align.detect_face.detect_face(img, self.minsize, self.pnet, self.rnet, self.onet, self.threshold, self.factor)
+            bounding_boxes, points = align.detect_face.detect_face(img, self.minsize, self.pnet, self.rnet, self.onet, self.threshold, self.factor)
             nrof_faces = bounding_boxes.shape[0]
             detected_faces = []
             detected_bb = []
@@ -103,7 +103,7 @@ class FaceClassifier:
 
 def create_result_image(source_image, detected_bb, class_names, best_class_indices, best_class_probabilities):
     source_image = np.array(source_image)
-    #result_image = cv2.cvtColor(source_image, cv2.COLOR_BGR2RGB)
+    result_image = cv2.cvtColor(source_image, cv2.COLOR_BGR2RGB)
     result_image = source_image.copy()
 
     for i in range(len(detected_bb)):
@@ -123,13 +123,23 @@ class Serve(web.application):
 class Index:
     def GET(self):
         web.header("Content-Type", "text/html; charset=utf-8")
-        return """<html><head></head><body>
+        content = """<html><head></head><body>
+        <h2>Face Recognition Demo</h2>
         <form method="POST" enctype="multipart/form-data" action="">
         <input type="file" name="myfile" />
         <br/>
         <input type="submit" />
-        </form>
-        </body></html>"""
+        </form>"""
+        content += "<h2>Parameters</h2>"
+        content += "<ul>"
+        content += "<li>model : " + web.args.model + "</li>"
+        content += "<li>clasifier : " + web.args.classifier_filename + "</li>"
+        content += "<li>MTCNN image size : " + str(web.mtcnn.image_size) + "</li>"
+        content += "<li>FaceNet embedding size : " + str(web.feature_net.embedding_size) + "</li>"
+        content += "<li>Registered class : " + str(web.classifier.class_names) + "</li>"
+        content += "</ul>"
+        content += "</body></html>"
+        return content
 
     def POST(self):
         x = web.input(myfile={})
@@ -141,6 +151,7 @@ class Index:
 
 class RunLocal:
     def GET(self):
+        web.header("Content-Type", "text/html; charset=utf-8")
         start_time = time.time()
         input_path = './input/1.jpg'  # pre-defined path
         try:
@@ -148,8 +159,11 @@ class RunLocal:
         except (IOError, ValueError, IndexError) as e:
             errorMessage = '{}: {}'.format(input_path, e)
             return errorMessage
+        source_image = img.copy()
         loaded_time = time.time()
         detected_faces, detected_bb = web.mtcnn.detect(img)
+        if len(detected_faces) == 0:
+            return '<html><body><p>No face is found!</p></body></html>'
         detected_time = time.time()
         detected_faces = web.feature_net.preprocess(detected_faces)
         preprocessed_time = time.time()
@@ -157,29 +171,34 @@ class RunLocal:
         extracted_time = time.time()
         best_class_indices, best_class_probabilities = web.classifier.classify(features)
         classified_time = time.time()
-        result_image = create_result_image(img, detected_bb, web.classifier.class_names, best_class_indices, best_class_probabilities)
-        misc.imsave('./output/result.png', result_image)
 
-        s = '<html><body>'
-        s += '<h2>Result image</h2>'
-        s += '<p><img src="/output" width="960"/></p>'
-        s += '<h2>Detected Faces</h2><p>'
+        result_image = create_result_image(source_image, detected_bb, web.classifier.class_names, best_class_indices, best_class_probabilities)
+        misc.imsave('./output/result.png', result_image)
         for i in range(len(detected_faces)):
+            misc.imsave('./output/face-%s.png' % i, detected_faces[i])
+
+        s = """<html><body>
+            <h2>Result image</h2>
+            <p><img src="/output/result.png" width="960"/></p>
+            <h2>Detected Faces</h2><p>"""
+        for i in range(len(detected_faces)):
+            s += '<img src="/output/face-%s.png" />' % i
             s += web.classifier.class_names[best_class_indices[i]] + ': '
             s += '%.3f' % (best_class_probabilities[i]) + '<br>'
         s += '</p><h2>Processing Time</h2><p>'
-        s += 'Total time: ' + '%.5f' % (classified_time - start_time) + '<br>'
-        s += 'Image load : ' + '%.5f' % (loaded_time - start_time) + '<br>'
-        s += 'Face detection : ' + '%.5f' % (detected_time - loaded_time) + '<br>'
-        s += 'Face preprocessing : ' + '%.5f' % (preprocessed_time - detected_time) + '<br>'
-        s += 'Feature extraction : ' + '%.5f' % (extracted_time - preprocessed_time) + '<br>'
-        s += 'Classifier : ' + '%.5f' % (classified_time - extracted_time)
+        s += 'Total time: %.5f' % (classified_time - start_time) + '<br>'
+        s += 'Image load : %.5f' % (loaded_time - start_time) + '<br>'
+        s += 'Face detection : %.5f' % (detected_time - loaded_time) + '<br>'
+        s += 'Face preprocessing : %.5f' % (preprocessed_time - detected_time) + '<br>'
+        s += 'Feature extraction : %.5f' % (extracted_time - preprocessed_time) + '<br>'
+        s += 'Classifier : %.5f' % (classified_time - extracted_time)
         s += '</p></body><html>'
         return s
 
 class Output:
-    def GET(self):
-        f = open('./output/result.png', 'rb')
+    def GET(self, param):
+        web.header("Content-Type", "image/png")
+        f = open('./output/' + param, 'rb')
         return f.read()
 
 def main(args):
@@ -199,8 +218,9 @@ def main(args):
             print('Web server')
             urls = ('/', 'Index',
                     '/run/local', 'RunLocal',
-                    '/output/*', 'Output')
+                    '/output/(.+)', 'Output')
             webapp = Serve(urls, globals())
+            web.args = args
             web.sess = sess
             web.mtcnn = mtcnn
             web.feature_net = feature_net
