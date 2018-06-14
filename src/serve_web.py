@@ -10,7 +10,7 @@ import argparse
 import tensorflow as tf
 import numpy as np
 
-import facenet
+import facenet2
 import align.detect_face
 
 from scipy import misc
@@ -37,7 +37,7 @@ class MTCNN:
             if img.ndim<2:
                 return [], []
             if img.ndim == 2:
-                img = facenet.to_rgb(img)
+                img = facenet2.to_rgb(img)
             img = img[:,:,0:3]
 
             bounding_boxes, points = align.detect_face.detect_face(img, self.minsize, self.pnet, self.rnet, self.onet, self.threshold, self.factor)
@@ -68,7 +68,7 @@ class MTCNN:
 class FaceNet:
     def __init__(self, sess, args):
         self.session = sess
-        facenet.load_model(args.model)
+        facenet2.load_model(args.model)
 
         # Get input and output tensors
         self.images_placeholder = tf.get_default_graph().get_tensor_by_name("input:0")
@@ -80,8 +80,8 @@ class FaceNet:
         processed_images = []
         for img in images:
             if img.ndim == 2:
-                img = facenet.to_rgb(img)
-            img = facenet.prewhiten(img)
+                img = facenet2.to_rgb(img)
+            img = facenet2.prewhiten(img)
             processed_images.append(img)
         return processed_images
 
