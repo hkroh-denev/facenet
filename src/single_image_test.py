@@ -11,7 +11,7 @@ import tensorflow as tf
 import numpy as np
 
 import facenet2
-import align.detect_face
+import align.detect_face2
 
 import pickle
 
@@ -25,7 +25,7 @@ def main(args):
         gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=args.gpu_memory_fraction)
         sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, log_device_placement=False))
         with sess.as_default():
-            pnet, rnet, onet = align.detect_face.create_mtcnn(sess, None)
+            pnet, rnet, onet = align.detect_face2.create_mtcnn(sess, None)
 
             minsize = 20 # minimum size of face
             threshold = [ 0.6, 0.7, 0.7 ]  # three steps's threshold
@@ -46,7 +46,7 @@ def main(args):
                 img = facenet2.to_rgb(img)
             img = img[:,:,0:3]
 
-            bounding_boxes, _ = align.detect_face.detect_face(img, minsize, pnet, rnet, onet, threshold, factor)
+            bounding_boxes, _ = align.detect_face2.detect_face(img, minsize, pnet, rnet, onet, threshold, factor)
             nrof_faces = bounding_boxes.shape[0]
             detected_faces = []
             detected_bb = []
@@ -126,18 +126,21 @@ def parse_arguments(argv):
     parser = argparse.ArgumentParser()
 
     parser.add_argument('input_image', type=str, help='Path to image which contains some faces')
-    parser.add_argument('model', type=str,
-        help='Could be either a directory containing the meta_file and ckpt_file or a model protobuf (.pb) file')
-    parser.add_argument('classifier_filename',
+    parser.add_argument('--model', type=str,
+        help='Could be either a directory containing the meta_file and ckpt_file or a model protobuf (.pb) file',
+        default="model/20180402-114759.pb")
+    parser.add_argument('--classifier_filename',
         help='Classifier model file name as a pickle (.pkl) file. ' +
-        'For training this is the output and for classification this is an input.')
+        'For training this is the output and for classification this is an input.',
+        default="model/my_classifier-1.pkl")
     parser.add_argument('--image_size', type=int,
-        help='Image size (height, width) in pixels.', default=182)
+        help='Image size (height, width) in pixels.', default=160)
     parser.add_argument('--margin', type=int,
-        help='Margin for the crop around the bounding box (height, width) in pixels.', default=44)
+        help='Margin for the crop around the bounding box (height, width) in pixels.', default=32)
     parser.add_argument('--gpu_memory_fraction', type=float,
-        help='Upper bound on the amount of GPU memory that will be used by the process.', default=1.0)
+        help='Upper bound on the amount of GPU memory that will be used by the process.', default=0.8)
     return parser.parse_args(argv)
 
 if __name__ == '__main__':
     main(parse_arguments(sys.argv[1:]))
+    input("Press Enter to close program")

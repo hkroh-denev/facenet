@@ -20,6 +20,14 @@ import cv2
 import web
 import time
 
+from os.path import expanduser
+
+def get_user_dir():
+    user_home = expanduser("~")
+    aww_home = os.path.join(user_home, 'aww')
+    return aww_home
+
+
 class MTCNN:
     def __init__(self, sess):
         self.session = sess
@@ -144,7 +152,7 @@ class Index:
     def POST(self):
         x = web.input(myfile={})
         if 'myfile' in x:
-            fout = open('./input/1.jpg','wb') # creates the file where the uploaded file should be stored
+            fout = open(get_user_dir() + '/input/1.jpg','wb') # creates the file where the uploaded file should be stored
             fout.write(x.myfile.file.read()) # writes the uploaded file to the newly created file.
             fout.close() # closes the file, upload complete.
         raise web.seeother('/run/local')
@@ -153,7 +161,7 @@ class RunLocal:
     def GET(self):
         web.header("Content-Type", "text/html; charset=utf-8")
         start_time = time.time()
-        input_path = './input/1.jpg'  # pre-defined path
+        input_path = get_user_dir() + '/input/1.jpg'
         try:
             img = misc.imread(input_path)
         except (IOError, ValueError, IndexError) as e:
@@ -173,9 +181,9 @@ class RunLocal:
         classified_time = time.time()
 
         result_image = create_result_image(source_image, detected_bb, web.classifier.class_names, best_class_indices, best_class_probabilities)
-        misc.imsave('./output/result.png', result_image)
+        misc.imsave(get_user_dir() + '/output/result.png', result_image)
         for i in range(len(detected_faces)):
-            misc.imsave('./output/face-%s.png' % i, detected_faces[i])
+            misc.imsave(get_user_dir() + '/output/face-%s.png' % i, detected_faces[i])
 
         s = """<html><body>
             <h2>Result image</h2>
@@ -198,7 +206,7 @@ class RunLocal:
 class Output:
     def GET(self, param):
         web.header("Content-Type", "image/png")
-        f = open('./output/' + param, 'rb')
+        f = open(get_user_dir() + '/output/' + param, 'rb')
         return f.read()
 
 def main(args):
@@ -231,11 +239,13 @@ def main(args):
 def parse_arguments(argv):
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('model', type=str,
-        help='Could be either a directory containing the meta_file and ckpt_file or a model protobuf (.pb) file')
-    parser.add_argument('classifier_filename',
+    parser.add_argument('--model', type=str,
+        help='Could be either a directory containing the meta_file and ckpt_file or a model protobuf (.pb) file',
+        default="model/20180402-114759.pb")
+    parser.add_argument('--classifier_filename',
         help='Classifier model file name as a pickle (.pkl) file. ' +
-        'For training this is the output and for classification this is an input.')
+        'For training this is the output and for classification this is an input.',
+        default="model/my_classifier-1.pkl")
     parser.add_argument('--gpu_memory_fraction', type=float,
         help='Upper bound on the amount of GPU memory that will be used by the process.', default=0.5)
     parser.add_argument('--port_number', type=int,
@@ -243,4 +253,17 @@ def parse_arguments(argv):
     return parser.parse_args(argv)
 
 if __name__ == '__main__':
+    user_dir = get_user_dir()
+    print('user_dir:', user_dir)
+    if not os.path.exists(user_dir):
+        os.mkdir(user_dir)
+
+    input_dir = os.path.join(user_dir, 'input')
+    if not os.path.exists(input_dir):
+        os.mkdir(input_dir)
+
+    output_dir = os.path.join(user_dir, 'output')
+    if not os.path.exists(output_dir):
+        os.mkdir(output_dir)
+
     main(parse_arguments(sys.argv[1:]))
