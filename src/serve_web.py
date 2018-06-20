@@ -48,7 +48,7 @@ class MTCNN:
                 img = facenet2.to_rgb(img)
             img = img[:,:,0:3]
 
-            bounding_boxes, points = align.detect_face.detect_face(img, self.minsize, self.pnet, self.rnet, self.onet, self.threshold, self.factor)
+            bounding_boxes, f_points = align.detect_face.detect_face(img, self.minsize, self.pnet, self.rnet, self.onet, self.threshold, self.factor)
             nrof_faces = bounding_boxes.shape[0]
             detected_faces = []
             detected_bb = []
@@ -71,7 +71,7 @@ class MTCNN:
                     scaled = misc.imresize(cropped, (self.image_size, self.image_size), interp='bilinear')
                     detected_faces.append(scaled)
                     detected_bb.append(bb)
-            return detected_faces, detected_bb
+            return detected_faces, detected_bb, f_points
 
 class FaceNet:
     def __init__(self, sess, args):
@@ -108,6 +108,31 @@ class FaceClassifier:
         best_class_indices = np.argmax(predictions, axis=1)
         best_class_probabilities = predictions[np.arange(len(best_class_indices)), best_class_indices]
         return best_class_indices, best_class_probabilities
+
+def face_alignment(img, face_size, f_point):
+    desired_left_eye = (0.35, 0.35)
+    desired_right_eye = (0.65, 0.35)
+    right_eye_center = (f_point[0], f_point[5])
+    left_eye_center = (f_point[1], f_point[6])
+
+    eyes_center = ( (right_eye_center[0] + left_eye_center[0])/2*face_size, (right_eye_center[1] + left_eye_center[1])/2 * face_size)
+    diff_x = np.sqrt(np.square(right_eye_center[0] - left_eye_center[0]))
+    diff_y = np.sqrt(np.square(right_eye_center[1] - left_eye_center[1]))
+    if left_eye_center[1] < right_eye_center[1]:
+        sign = -1.0
+    else:
+        sign = 1.0
+    angle = np.degrees(np.arctan2(diff_y, diff_x))
+    angle *= sign
+    scale = np.sqrt(np.square(right_eye_center[0] - left_eye_center[0]) + np.square(right_eye_center[1] - left_eye_center[1])) / np.sqrt(np.square(desired_right_eye[0] - desired_left_eye[0]) + np.square(desired_right_eye[1] - desired_left_eye[1]))
+    print(eyes_center, angle, scale)
+    M = cv2.getRotationMatrix2D(eyes_center, angle, scale)
+    tX = face_size * 0.5
+    tY = face_size * desired_left_eye[1]
+    M[0, 2] += (tX - eyes_center[0])
+    M[1, 2] += (tY - eyes_center[1])
+    (w, h) = (face_size, face_size)
+    return cv2.warpAffine(img, M, (w, h), flags=cv2.INTER_CUBIC)
 
 def create_result_image(source_image, detected_bb, class_names, best_class_indices, best_class_probabilities):
     source_image = np.array(source_image)
@@ -169,10 +194,12 @@ class RunLocal:
             return errorMessage
         source_image = img.copy()
         loaded_time = time.time()
-        detected_faces, detected_bb = web.mtcnn.detect(img)
+        detected_faces, detected_bb, f_points = web.mtcnn.detect(img)
         if len(detected_faces) == 0:
             return '<html><body><p>No face is found!</p></body></html>'
         detected_time = time.time()
+        for i in range(len(detected_faces)):
+            detected_faces[i] = face_alignment(detected_faces[i], web.mtcnn.image_size, f_points[:, i])
         detected_faces = web.feature_net.preprocess(detected_faces)
         preprocessed_time = time.time()
         features = web.feature_net.extract_feature(detected_faces)
@@ -184,6 +211,7 @@ class RunLocal:
         misc.imsave(get_user_dir() + '/output/result.png', result_image)
         for i in range(len(detected_faces)):
             misc.imsave(get_user_dir() + '/output/face-%s.png' % i, detected_faces[i])
+
 
         s = """<html><body>
             <h2>Result image</h2>
