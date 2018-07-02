@@ -407,10 +407,8 @@ def detect_face(img, minsize, pnet, rnet, onet, threshold, factor):
 
         w = total_boxes[:,2]-total_boxes[:,0]+1
         h = total_boxes[:,3]-total_boxes[:,1]+1
-        #print('before_points:', points)
-        #points[0:5,:] = np.tile(w,(5, 1))*points[0:5,:] + np.tile(total_boxes[:,0],(5, 1))-1
-        #points[5:10,:] = np.tile(h,(5, 1))*points[5:10,:] + np.tile(total_boxes[:,1],(5, 1))-1
-        #print('after_points:', points)
+        points[0:5,:] = np.tile(w,(5, 1))*points[0:5,:] + np.tile(total_boxes[:,0],(5, 1))-1
+        points[5:10,:] = np.tile(h,(5, 1))*points[5:10,:] + np.tile(total_boxes[:,1],(5, 1))-1
         if total_boxes.shape[0]>0:
             total_boxes = bbreg(total_boxes.copy(), np.transpose(mv))
             pick = nms(total_boxes.copy(), 0.7, 'Min')
