@@ -1,3 +1,4 @@
+import os
 import sys
 import argparse
 
@@ -17,7 +18,7 @@ print(cv2.__version__)
 
 def cam_test():
     cap = cv2.VideoCapture(0)
-    #cap.set(1, 0)
+
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
@@ -33,12 +34,12 @@ class MTCNN:
         self.session = sess
         self.pnet, self.rnet, self.onet = align.detect_face.create_mtcnn(self.session, None)
 
-        self.minsize = 20 # minimum size of face
+        self.minsize = 80 # minimum size of face
         self.threshold = [ 0.6, 0.7, 0.7 ]  # three steps's threshold
         self.factor = 0.709 # scale factor
 
-        self.margin_rate = 0.5
         self.image_size = 120 * 2
+        self.margin_rate = 0.5  # margin = detected_box_size * margin_rate
 
     def detect(self, img):
         with self.session.as_default():
@@ -115,33 +116,77 @@ def face_alignment(img, face_size, f_point):
 
 def extract_face_images(args):
 
+    video_ext = ['.mkv', '.mp4', '.avi', '.wmv']
+    image_ext = ['.jpg', '.jpeg', '.png', '.gif']
+
     gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=args.gpu_memory_fraction)
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, log_device_placement=False)) as sess:
         mtcnn = MTCNN(sess)
 
         count = 0
 
-        vidcap = cv2.VideoCapture(args.input)
-        success, image = vidcap.read()
-        success = True
-        while success:
-            vidcap.set(cv2.CAP_PROP_POS_MSEC, (count * args.interval))
-            success, image = vidcap.read()
-            if success:
-                detected_faces, detected_bb, f_points, face_score = mtcnn.detect(image)
+        if os.path.isdir(args.input):
+            input_files = [os.path.join(args.input, f) for f in os.listdir(args.input) if os.path.isfile(os.path.join(args.input, f))]
+        else:
+            input_files = [args.input]
+
+        print(input_files)
+
+        input_index = 0
+        total_faces = 0
+        total_rejected = 0
+        for input_file in input_files:
+            filename, file_ext = os.path.splitext(input_file)
+            print(input_file, file_ext)
+            if file_ext in video_ext:
+                vidcap = cv2.VideoCapture(input_file)
+                success, image = vidcap.read()
+                success = True
+                while success:
+                    vidcap.set(cv2.CAP_PROP_POS_MSEC, (count * args.interval))
+                    pos_msec = vidcap.get(cv2.CAP_PROP_POS_MSEC)
+                    if count * args.interval - pos_msec > args.interval:
+                        break;
+                    success, image = vidcap.read()
+                    if success:
+                        detected_faces, detected_bb, f_points, face_score = mtcnn.detect(image)
+                        rejected = 0
+                        for i in range(len(detected_faces)):
+                            if face_score[i] > 0.8:
+                                aligned_face, angle, scale = face_alignment(detected_faces[i], mtcnn.image_size, f_points[:, i])
+                                aligned_face = misc.imresize(aligned_face, (args.image_size, args.image_size), interp='bicubic')
+                                cv2.imwrite(args.output + '/%s_%03d_%08d_%03d.jpg' % (args.filename_prefix, input_index, count, i), aligned_face)
+                            else:
+                                rejected += 1
+                        print(count * args.interval // 1000, 'face:', len(detected_faces), 'rejected:', rejected)
+                        total_faces += len(detected_faces)
+                        total_rejected += rejected
+                    count += 1
+            elif file_ext in image_ext:
+                image = cv2.imread(input_file)
+                detected_faces = []
                 rejected = 0
-                for i in range(len(detected_faces)):
-                    if face_score[i] > 0.9:
-                        aligned_face = face_alignment(detected_faces[i], mtcnn.image_size, f_points[:, i])
-                        aligned_face = misc.imresize(aligned_face, (args.image_size, args.image_size), interp='bicubic')
-                        cv2.imwrite(args.output + '/frame_%08d_%03dd.jpg' % (count, i), aligned_face)
-                    else:
-                        rejected += 1
-                print(count, 'face:', len(detected_faces), 'rejected:', rejected)
-            count += 1
+                if type(image) is np.ndarray:
+                    detected_faces, detected_bb, f_points, face_score = mtcnn.detect(image)
+
+                    for i in range(len(detected_faces)):
+                        if face_score[i] > 0.8:
+                            aligned_face = face_alignment(detected_faces[i], mtcnn.image_size, f_points[:, i])
+                            aligned_face = misc.imresize(aligned_face, (args.image_size, args.image_size), interp='bicubic')
+                            cv2.imwrite(args.output + '/%s_%03d_%08d_%03d.jpg' % (args.filename_prefix, input_index, count, i), aligned_face)
+                        else:
+                            rejected += 1
+                    print(input_index, 'face:', len(detected_faces), 'rejected:', rejected)
+                else:
+                    print('invalid input file')
+                total_faces += len(detected_faces)
+                total_rejected += rejected
+            input_index += 1
+        print('total files: ', input_index)
+        print('total faces:', total_faces, 'total rejected:', total_rejected)
 
 if __name__ == '__main__':
-    print('video to image')
+    print('extract face from video or image file(s)')
     parser = argparse.ArgumentParser()
     parser.add_argument('--input', help='path to the input video file')
     parser.add_argument('--output', help='path to the output images')
@@ -149,6 +194,7 @@ if __name__ == '__main__':
     parser.add_argument('--image_size', type=int, default=160, help='size of output image')
     parser.add_argument('--gpu_memory_fraction', type=float,
         help='Upper bound on the amount of GPU memory that will be used by the process.', default=0.5)
+    parser.add_argument('--filename_prefix', default='frame')
     args = parser.parse_args()
     print(args)
     extract_face_images(args)

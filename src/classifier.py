@@ -34,9 +34,14 @@ import os
 import sys
 import math
 import pickle
+
 from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier as KNN
 from sklearn.neural_network import MLPClassifier as MLP
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import AdaBoostClassifier
+from sklearn.ensemble import VotingClassifier
+
 import shutil
 
 def main(args):
@@ -98,7 +103,17 @@ def main(args):
                 #model = SVC(kernel='linear', probability=True)
                 #model = KNN()
                 #model = MLP()
-                model = MLP(hidden_layer_sizes=(256, 128))
+                #model = MLP(hidden_layer_sizes=(256, 128))
+                #model = RandomForestClassifier()
+                #model = AdaBoostClassifier(base_estimator=SVC(kernel='linear', probability=True), n_estimators=10)
+                model = VotingClassifier(
+                    estimators=[
+                        ('svm', SVC(kernel='linear', probability=True)),
+                        ('mlp', MLP(hidden_layer_sizes=(256, 128))),
+                        ('rfc', RandomForestClassifier()),
+                        ('ada', AdaBoostClassifier(base_estimator=SVC(kernel='linear', probability=True), n_estimators=10))
+                        ],
+                    voting='soft')
                 print('model:', model)
                 model.fit(emb_array, labels)
 

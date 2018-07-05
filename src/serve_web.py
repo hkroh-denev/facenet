@@ -162,12 +162,14 @@ def create_point_face_image(img, face_size, f_point):
     return point_img
 
 def create_result_image(source_image, detected_bb, class_names, best_class_indices, best_class_probabilities):
+    reduce_margin = 30
     source_image = np.array(source_image)
     result_image = source_image.copy()
 
     for i in range(len(detected_bb)):
         bb = detected_bb[i]
-        cv2.rectangle(result_image, (bb[0], bb[1]), (bb[2], bb[3]), (0, 255, 0), 3)
+        cv2.rectangle(result_image, (bb[0] + reduce_margin, bb[1] + reduce_margin),
+            (bb[2] - reduce_margin, bb[3] - reduce_margin), (0, 255, 0), 3)
         cv2.putText(result_image, class_names[best_class_indices[i]],
                     (bb[2] + 5, bb[3] - 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
         cv2.putText(result_image, '%.3f' % best_class_probabilities[i],
@@ -267,12 +269,12 @@ class RunLocal:
             <p><img src="/output/result.png" width="960"/></p>
             <h2>Detected Faces</h2><p>"""
         for i in range(len(detected_faces)):
-            s += '<img src="/output/face-%sp.png" />' % i
+            #s += '<img src="/output/face-%sp.png" />' % i
             s += '<img src="/output/face-%sc.png" />' % i
             s += web.classifier.class_names[best_class_indices[i]] + ': '
             s += 'rec=%.3f' % (best_class_probabilities[i]) + ' det=%.3f' % (face_score[i])
             s += '<img src="/output/face-%sa.png" />' % i
-            s += '<img src="/output/face-%sap.png" />' % i
+            #s += '<img src="/output/face-%sap.png" />' % i
             s += web.classifier.class_names[best_class_indices2[i]] + ': '
             s += 'rec=%.3f' % (best_class_probabilities2[i])
             s += '<br>'

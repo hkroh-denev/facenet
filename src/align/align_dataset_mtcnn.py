@@ -146,15 +146,15 @@ def parse_arguments(argv):
     parser.add_argument('--image_size', type=int,
         help='Image size (height, width) in pixels.', default=182)
     parser.add_argument('--margin', type=int,
-        help='Margin for the crop around the bounding box (height, width) in pixels.', default=44)
+        help='Margin for the crop around the bounding box (height, width) in pixels.', default=40)
     parser.add_argument('--random_order', 
         help='Shuffles the order of images to enable alignment using multiple processes.', action='store_true')
     parser.add_argument('--gpu_memory_fraction', type=float,
-        help='Upper bound on the amount of GPU memory that will be used by the process.', default=1.0)
+        help='Upper bound on the amount of GPU memory that will be used by the process.', default=0.5)
     parser.add_argument('--detect_multiple_faces', type=bool,
-                        help='Detect and align multiple faces per image.', default=False)
+                        help='Detect and align multiple faces per image.', default=True)
     parser.add_argument('--output_image_format', type=str,
-                        help='Image format of output (jpg, png)', default='png')
+                        help='Image format of output (jpg, png)', default='jpg')
     return parser.parse_args(argv)
 
 if __name__ == '__main__':
