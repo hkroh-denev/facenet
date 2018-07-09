@@ -126,8 +126,10 @@ class FaceClassifier:
         return best_class_indices, best_class_probabilities
 
 def face_alignment(img, face_size, f_point):
-    desired_left_eye = (0.35, 0.35)
-    desired_right_eye = (0.65, 0.35)
+    #desired_left_eye = (0.35, 0.35)
+    #desired_right_eye = (0.65, 0.35)
+    desired_left_eye = (0.34, 0.36)
+    desired_right_eye = (0.66, 0.36)
     right_eye_center = (f_point[0], f_point[5])
     left_eye_center = (f_point[1], f_point[6])
 
@@ -151,7 +153,7 @@ def face_alignment(img, face_size, f_point):
 
     (w, h) = (face_size, face_size)
 
-    return cv2.warpAffine(img, M, (w, h), flags=cv2.INTER_CUBIC)
+    return cv2.warpAffine(img, M, (w, h), flags=cv2.INTER_CUBIC), angle, scale
 
 def create_point_face_image(img, face_size, f_point):
     point_img = img.copy()
@@ -249,10 +251,14 @@ class RunLocal:
 
         aligned_faces = []
         aligned_faces_cropped = []
+        aligned_faces_angles = []
+        aligned_faces_scales = []
         for i in range(len(detected_faces)):
-            aligned_face = face_alignment(detected_faces[i], web.mtcnn.image_size, f_points[:, i])
+            aligned_face, angle, scale = face_alignment(detected_faces[i], web.mtcnn.image_size, f_points[:, i])
             aligned_face = misc.imresize(aligned_face, (web.feature_net.image_size, web.feature_net.image_size), interp='bicubic')
             aligned_faces.append(aligned_face)
+            aligned_faces_angles.append(angle)
+            aligned_faces_scales.append(scale)
 
         preprocessed_aligned_faces = web.feature_net.preprocess(aligned_faces)
         features2 = web.feature_net.extract_feature(preprocessed_aligned_faces)
@@ -277,6 +283,7 @@ class RunLocal:
             #s += '<img src="/output/face-%sap.png" />' % i
             s += web.classifier.class_names[best_class_indices2[i]] + ': '
             s += 'rec=%.3f' % (best_class_probabilities2[i])
+            s += ', angle=%.2f, scale=%.2f' % (aligned_faces_angles[i], aligned_faces_scales[i])
             s += '<br>'
         s += '</p><h2>Processing Time</h2><p>'
         s += 'Total time: %.5f' % (classified_time - start_time) + '<br>'
