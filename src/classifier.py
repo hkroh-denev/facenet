@@ -66,6 +66,8 @@ def main(args):
             for cls in dataset:
                 assert(len(cls.image_paths)>0, 'There must be at least one image for each class in the dataset')
 
+            if args.max_class != 0:
+                dataset = dataset[:args.max_class]
 
             paths, labels = facenet.get_image_paths_and_labels(dataset)
 
@@ -103,17 +105,17 @@ def main(args):
                 #model = SVC(kernel='linear', probability=True)
                 #model = KNN()
                 #model = MLP()
-                #model = MLP(hidden_layer_sizes=(256, 128))
+                #model = MLP(hidden_layer_sizes=(128, ), max_iter=500)
                 #model = RandomForestClassifier()
                 #model = AdaBoostClassifier(base_estimator=SVC(kernel='linear', probability=True), n_estimators=10)
                 model = VotingClassifier(
                     estimators=[
+                        ('knn', KNN()),
                         ('svm', SVC(kernel='linear', probability=True)),
-                        ('mlp', MLP(hidden_layer_sizes=(256, 128))),
-                        ('rfc', RandomForestClassifier()),
-                        ('ada', AdaBoostClassifier(base_estimator=SVC(kernel='linear', probability=True), n_estimators=10))
+                        ('mlp', MLP())
                         ],
                     voting='soft')
+
                 print('model:', model)
                 model.fit(emb_array, labels)
 
@@ -217,6 +219,8 @@ def parse_arguments(argv):
         help='Use this number of images from each class for training and the rest for testing', default=10)
     parser.add_argument('--output_dir', type=str,
         help='Path to the output for classifier and save mode')
+    parser.add_argument('--max_class', type=int,
+        help='Maximum number of class, zero for unlimit', default=0)
 
     return parser.parse_args(argv)
 

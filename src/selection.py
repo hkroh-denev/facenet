@@ -1,6 +1,6 @@
 """
-    clustering.py
-    2018.06.11
+    selection.py
+    2018.07.12
 """
 
 import sys
@@ -13,7 +13,6 @@ import numpy as np
 import facenet
 
 from scipy import misc
-from sklearn.cluster import KMeans
 
 class FaceNet:
     def __init__(self, sess, args):
@@ -39,63 +38,68 @@ class FaceNet:
         emb_array = self.session.run(self.embeddings, feed_dict={self.images_placeholder:images, self.phase_train_placeholder:False})
         return emb_array
 
-class FaceClustering:
-    def __init__(self, num_clusters):
-        self.kmeans = KMeans(n_clusters = num_clusters, random_state=0)
-
-    def clustering(self, x):
-        self.kmeans.fit(x)
-        return self.kmeans.labels_
-
 def main(args):
-    print('Creating networks and loading parameters')
-
-    input_images = facenet.load_data(facenet.get_image_paths(args.input_dir), do_random_crop=False, do_random_flip=False, image_size=args.image_size)
+    if not os.path.exists(args.output_dir):
+        os.mkdir(args.output_dir)
 
     gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=args.gpu_memory_fraction)
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, log_device_placement=False)) as sess:
         print('Loading feature extraction model')
         feature_net = FaceNet(sess, args)
 
-        batch_count = len(input_images) // args.batch_size
-        if len(input_images) % args.batch_size != 0:
-            batch_count += 1
+        dir_list = [name for name in os.listdir(args.input_dir) if os.path.isdir(os.path.join(args.input_dir, name))]
 
-        all_embeddings = []
-        for i in range(batch_count):
-            batch_images = input_images[i*args.batch_size:(i+1)*args.batch_size]
-            embeddings = feature_net.extract_feature(batch_images)
-            if all_embeddings == []:
-                all_embeddings = embeddings
+        for dir_name in dir_list:
+            input_dir = os.path.join(args.input_dir, dir_name)
+            input_images = facenet.load_data(facenet.get_image_paths(input_dir), do_random_crop=False, do_random_flip=False, image_size=args.image_size)
+
+            batch_count = len(input_images) // args.batch_size
+            if len(input_images) % args.batch_size != 0:
+                batch_count += 1
+
+            all_embeddings = []
+            for i in range(batch_count):
+                batch_images = input_images[i*args.batch_size:(i+1)*args.batch_size]
+                embeddings = feature_net.extract_feature(batch_images)
+                if all_embeddings == []:
+                    all_embeddings = embeddings
+                else:
+                    all_embeddings = np.concatenate([all_embeddings, embeddings])
+
+            if not os.path.exists(os.path.join(args.output_dir, dir_name)):
+                os.mkdir(os.path.join(args.output_dir, dir_name))
+
+            mean_embedding = np.mean(all_embeddings, axis=0)
+            distance = np.mean(np.square(all_embeddings - mean_embedding), axis=1)
+            if len(all_embeddings) < args.k:
+                selection = len(all_embeddings)
             else:
-                all_embeddings = np.concatenate([all_embeddings, embeddings])
+                selection = args.k
+            minimum_k = np.argpartition(distance, selection)[:selection]
+            count = 0
+            for idx in minimum_k:
+                misc.imsave(os.path.join(args.output_dir, dir_name, '%d.jpg' % count), input_images[idx])
+                count += 1
 
-    if not os.path.exists(args.output_dir):
-        os.mkdir(args.output_dir)
-
-    face_cluster = FaceClustering(num_clusters=args.num_clusters)
-    labels = face_cluster.clustering(all_embeddings)
-    for i in range(len(labels)):
-        if not os.path.exists(os.path.join(args.output_dir, str(labels[i]))):
-            os.mkdir(os.path.join(args.output_dir, str(labels[i])))
-        misc.imsave(os.path.join(args.output_dir, str(labels[i]), str(i) + '.jpg'), input_images[i])
 
 def parse_arguments(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument('model', type=str,
         help='Could be either a directory containing the meta_file and ckpt_file or a model protobuf (.pb) file')
     parser.add_argument('input_dir', type=str,
-        help='Directory of input images (cropped and aligned)')
+        help='Directory of input images (separated by class id)')
     parser.add_argument('output_dir', type=str,
         help='Directory of output images (separated by class id)')
     parser.add_argument('--num_clusters', type=int,
         help='Number of face cluster', default=5)
     parser.add_argument('--batch_size', type=int,
-        help='Number of images to process in a batch.', default=10)
+        help='Number of images to process in a batch.', default=32)
     parser.add_argument('--image_size', type=int,
         help='Image size (height, width) in pixels.', default=160)
     parser.add_argument('--gpu_memory_fraction', type=float,
         help='Upper bound on the amount of GPU memory that will be used by the process.', default=0.5)
+    parser.add_argument('--k', type=int,
+        help='number of selection', default=50)
     return parser.parse_args(argv)
 
 if __name__ == '__main__':
