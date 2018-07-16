@@ -213,6 +213,10 @@ def detect_file(mtcnn, input_file, input_index, output, args):
     return 0, 0
 
 def extract_face_images(args):
+    
+    if not os.path.exists(args.output):
+        os.mkdir(args.output)
+
 
     gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=args.gpu_memory_fraction)
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, log_device_placement=False)) as sess:
@@ -226,9 +230,48 @@ def extract_face_images(args):
 
         print('total files: ', count)
         print('total faces:', detected, 'total rejected:', rejected)
+        
+def face_detection_benchmark(args):
+    print('Face Detection Becnchmark')
+    selected_category = [
+        '1--',
+        '9--',
+        '11--',
+        '12--',
+        '49--'
+        ]
+    dirs = []
+    for x in os.listdir(args.input):
+        for cat in selected_category:
+            if x.find(cat) == 0:
+                dirs.append(os.path.join(args.input, x))
+                break
+            
+    outfile = open(args.output, 'wt')
+    gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=args.gpu_memory_fraction)
+    with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, log_device_placement=False)) as sess:
+        mtcnn = MTCNN(sess, multiple=args.detect_multiple_faces)
+        mtcnn.margin_rate = 0.0     # no margin
+        mtcnn.threshold = [ 0.6, 0.7, 0.1 ]
+        for inputpath in dirs:
+            inputfiles = [os.path.join(inputpath, x) for x in os.listdir(inputpath) if os.path.isfile(os.path.join(inputpath, x))]
+            for inputfile in inputfiles:
+                image = cv2.imread(inputfile)
+                
+                detected_faces, detected_bb, f_points, face_score = mtcnn.detect(image)
+              
+                filepath = inputfile[len(args.input)+1:]
+                outfile.write(filepath+'\n')
+                outfile.write(str(len(detected_bb))+'\n')
+                for i in range(len(detected_bb)):
+                    bb = detected_bb[i]
+                    outfile.write(str(bb[0]) + ' ' + str(bb[1]) + ' ' + str(bb[2]-bb[0]) + ' ' + str(bb[3]-bb[1])+ ' ' + str(face_score[i]) +  '\n')
+                
+    outfile.close()
+            
 
 if __name__ == '__main__':
-    print('extract face from video or image file(s)')
+    print('register.py - denev - face registration and other set of utilities')
     parser = argparse.ArgumentParser()
     parser.add_argument('--input', help='path to the input video file')
     parser.add_argument('--output', help='path to the output images')
@@ -239,8 +282,11 @@ if __name__ == '__main__':
     parser.add_argument('--detect_multiple_faces', type=int,
                         help='Detect and align multiple faces per image.', default=1)
     parser.add_argument('--preserve_file_name', type=int, default=0)
+    parser.add_argument('--benchmark', type=int, default=0)
+    
     args = parser.parse_args()
     print(args)
-    if not os.path.exists(args.output):
-        os.mkdir(args.output)
-    extract_face_images(args)
+    if args.benchmark == 0:
+        extract_face_images(args)
+    elif args.benchmark == 1:
+        face_detection_benchmark(args)
