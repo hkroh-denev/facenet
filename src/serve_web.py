@@ -49,7 +49,7 @@ class MTCNN:
             img = img[:,:,0:3]
 
             bounding_boxes, f_points = align.detect_face.detect_face(img, self.minsize, self.pnet, self.rnet, self.onet, self.threshold, self.factor)
-            print('bounding_boxes', bounding_boxes)
+            #print('bounding_boxes', bounding_boxes)
             nrof_faces = bounding_boxes.shape[0]
             detected_faces = []
             detected_bb = []
@@ -60,8 +60,18 @@ class MTCNN:
                 det_arr = []
                 img_size = np.asarray(img.shape)[0:2]
                 if nrof_faces>1:
-                    for i in range(nrof_faces):
-                        det_arr.append(np.squeeze(det[i]))
+                    if self.detect_multiple_faces:
+                        for i in range(nrof_faces):
+                            det_arr.append(np.squeeze(det[i]))
+                    else:
+                        bounding_box_size = (det[:,2]-det[:,0])*(det[:,3]-det[:,1])
+                        img_center = img_size / 2
+                        offsets = np.vstack([ (det[:,0]+det[:,2])/2-img_center[1], (det[:,1]+det[:,3])/2-img_center[0] ])
+                        offset_dist_squared = np.sum(np.power(offsets,2.0),0)
+                        index = np.argmax(bounding_box_size-offset_dist_squared*2.0) # some extra weight on the centering
+                        det_arr.append(det[index,:])
+                else:
+                    det_arr.append(np.squeeze(det))
 
                 for i, det in enumerate(det_arr):
                     det = np.squeeze(det)
@@ -73,7 +83,7 @@ class MTCNN:
                     bb[2] = np.minimum(det[2]+margin0, img_size[1])
                     bb[3] = np.minimum(det[3]+margin1, img_size[0])
                     cropped = img[bb[1]:bb[3],bb[0]:bb[2],:]
-                    scaled = misc.imresize(cropped, (self.image_size, self.image_size), interp='bilinear')
+                    scaled = misc.imresize(cropped, (self.image_size, self.image_size), interp='bicubic')
                     detected_faces.append(scaled)
                     detected_bb.append(bb)
 
@@ -126,7 +136,9 @@ class FaceClassifier:
         return best_class_indices, best_class_probabilities
 
 def face_alignment(img, face_size, f_point):
-    desired_left_eye = (0.40, 0.40)
+    #desired_left_eye = (0.35, 0.35)
+    #desired_right_eye = (0.65, 0.35)
+    desired_left_eye = (0.30, 0.40)
     desired_right_eye = (0.70, 0.40)
     right_eye_center = (f_point[0], f_point[5])
     left_eye_center = (f_point[1], f_point[6])
@@ -142,7 +154,7 @@ def face_alignment(img, face_size, f_point):
     angle *= sign
     scale = np.sqrt(np.square(desired_right_eye[0] - desired_left_eye[0]) + np.square(desired_right_eye[1] - desired_left_eye[1])) / np.sqrt(np.square(right_eye_center[0] - left_eye_center[0]) + np.square(right_eye_center[1] - left_eye_center[1]))
 
-    print(eyes_center, angle, scale)
+    #print(eyes_center, angle, scale)
     M = cv2.getRotationMatrix2D(eyes_center, angle, scale)
     tX = face_size * 0.5
     tY = face_size * desired_left_eye[1]
